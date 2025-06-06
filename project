@@ -1,1 +1,68 @@
+import pandas as pd
+import numpy as np
+import os
+import pickle
+
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
+
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, LSTM, Dense, Dropout
+from tensorflow.keras.utils import to_categorical
+
+# Create folders if not exist
+os.makedirs('models', exist_ok=True)
+
+# Load dataset
+df = pd.read_csv('train.csv')  # adjust path if needed
+print(df.head())
+
+# Preprocess
+texts = df['text'].astype(str).values
+labels = df['emotion'].values
+
+# Encode labels
+le = LabelEncoder()
+labels_encoded = le.fit_transform(labels)
+labels_cat = to_categorical(labels_encoded)
+
+# Tokenize text
+tokenizer = Tokenizer(num_words=10000, oov_token="<OOV>")
+tokenizer.fit_on_texts(texts)
+sequences = tokenizer.texts_to_sequences(texts)
+MAX_LEN = 100
+X = pad_sequences(sequences, maxlen=MAX_LEN)
+
+# Train/test split
+X_train, X_test, y_train, y_test = train_test_split(X, labels_cat, test_size=0.2, random_state=42)
+
+# Build model
+model = Sequential()
+model.add(Embedding(input_dim=10000, output_dim=128, input_length=MAX_LEN))
+model.add(LSTM(64, return_sequences=False))
+model.add(Dropout(0.5))
+model.add(Dense(32, activation='relu'))
+model.add(Dense(labels_cat.shape[1], activation='softmax'))
+
+model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+# Train
+model.fit(X_train, y_train, epochs=5, batch_size=32, validation_split=0.1)
+
+# Evaluate
+loss, acc = model.evaluate(X_test, y_test)
+print(f"Test accuracy: {acc:.2f}")
+
+# Save model and tokenizer/encoder
+model.save('models/lstm_emotion_model.h5')
+
+with open('models/tokenizer.pkl', 'wb') as f:
+    pickle.dump(tokenizer, f)
+
+with open('models/label_encoder.pkl', 'wb') as f:
+    pickle.dump(le, f)
+
+print("✅ Model, tokenizer, and label encoder saved.")
 
